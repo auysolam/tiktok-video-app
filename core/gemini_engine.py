@@ -1,0 +1,200 @@
+import os
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
+
+# นำเข้าโครงสร้างข้อมูลที่เราเขียนไว้
+from core.schema import VideoPlan
+
+# โหลด API Key จากไฟล์ .env (คุณต้องสร้างไฟล์ .env และใส่ GEMINI_API_KEY=xxx)
+load_dotenv()
+
+from typing import List
+import os
+
+def generate_image_from_prompt(prompt: str, output_path: str):
+    """
+    ใช้ AI เจนภาพนิ่งโดยตรงจาก Gemini API Key (รุ่น Imagen 3) ตามที่ผู้ใช้รีเควส
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("Please set GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    
+    try:
+        # ใช้ Imagen 3 Model ของ Google ด้วยคลาสใหม่ล่าสุด
+        result = client.models.generate_images(
+            model='imagen-3.0-generate-001',
+            prompt=prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="9:16",
+            )
+        )
+        
+        for generated_image in result.generated_images:
+            # Save the image
+            from PIL import Image
+            import io
+            image = Image.open(io.BytesIO(generated_image.image.image_bytes))
+            image.save(output_path)
+            return True, ""
+            
+    except Exception as e:
+        print(f"Imagen Generation Error: {e}")
+        error_msg = str(e)
+        # ถ้าเจอปัญหา Quota, API Key ไม่อนุญาต หรืออื่นๆ จะวาด Mockup พร้อมอธิบาย Error ให้ผู้ใช้รู้ตัว
+        from PIL import Image, ImageDraw
+        img = Image.new('RGB', (1080, 1920), color = (73, 109, 137))
+        d = ImageDraw.Draw(img)
+        d.text((100,100), f"Mockup Scene\n(Gemini API Error: {error_msg})\nPrompt: {prompt[:50]}...", fill=(255,255,0))
+        img.save(output_path)
+        return False, error_msg
+
+def analyze_product_from_images(image_paths: List[str]) -> str:
+    """
+    วิเคราะห์ภาพสินค้าและดึงจุดขาย (Sales Pitch / Product Details) ออกมาเป็นข้อความ
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("Please set GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    
+    import PIL.Image
+    uploaded_images = []
+    for path in image_paths:
+        try:
+            img = PIL.Image.open(path)
+            uploaded_images.append(img)
+        except:
+            pass
+            
+    system_instruction = "คุณคือนักการตลาดมือทอง ช่วยดูภาพสินค้าต่อไปนี้แล้วเขียน: 1. ชื่อ/ประเภทสินค้า 2. จุดเด่น/สรรพคุณ 3. ไอเดียสคริปต์การขายคร่าวๆ (Draft Script) สำหรับ TikTok เพื่อเป็นไอเดียตั้งต้น (เขียนสั้นๆ สรุปใจความสำคัญ)"
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพและร่างสคริปต์ขายของคร่าวๆให้หน่อย"],
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+        )
+    )
+    return response.text
+
+def generate_video_plan(image_paths: List[str], product_details: str, character_type: str, character_skin: str, character_traits: str, use_sfx: bool, num_scenes: int, scene_duration: int, product_scene_count: int, background: str, voice_type: str, voice_emotion: str, no_voiceover: bool = False, fashion_mode: bool = False) -> VideoPlan:
+    """
+    รับรายการภาพสินค้าและใช้ Gemini สร้างแผนการทำวิดีโอ (JSON) กลับมา โดยอิงตามการตั้งค่าตัวละครและโครงสร้าง
+    """
+    # ตรวจสอบ API Key
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("Please set GEMINI_API_KEY in .env file")
+
+    # ตั้งค่า API Key
+    client = genai.Client(api_key=api_key)
+    
+    # อัปโหลดภาพไปยัง API
+    import PIL.Image
+    uploaded_images = []
+    print(f"กำลังอัปโหลดภาพจำนวน {len(image_paths)} ภาพ...")
+    for path in image_paths:
+        try:
+            img = PIL.Image.open(path)
+            uploaded_images.append(img)
+        except Exception as e:
+            print(f"ข้ามภาพ {path} เนื่องจาก: {e}")
+    
+    # กำหนดเนื้อหา Sound Effect
+    sfx_prompt = "ให้ใส่เสียง Sound Effects หรือ BGM กวนๆ ตลกๆ หรือตื่นเต้น แทรกในวงเล็บของ script ด้วย เช่น [เสียงตู้ม] หรือ [เสียงหัวเราะ]" if use_sfx else "ห้ามใส่ Sound Effects ลงในบทพูด ให้ใช้เสียงพากย์ล้วนๆ"
+
+    script_instruction = '3. คิดบทพากย์ (script) ที่ดึงดูด น่าสนใจ ขายของแบบเนียนๆ โดยต้องสอดคล้องกับ "เสียงผู้พากย์" และ "อารมณ์น้ำเสียง" ที่กำหนดไว้ข้างต้นอย่างเคร่งครัด ใช้ภาษาไทยสไตล์วัยรุ่น TikTok'
+    video_voice_instruction = f'- **สำคัญด้านเสียง:** ต้องบังคับใน Prompt ให้เครื่องมือสร้างวิดีโอจ่ายเสียงที่ต่อเนื่องกัน โดยสั่งว่า "Include perfectly synchronized voiceover narration in {voice_type} voice with {voice_emotion} tone, EXACTLY the same voice identity and vocal pitch as previous scenes"'
+
+    # คำสั่ง (Prompt) ที่บังคับให้ AI ทำตาม    
+    if "ไม่มีตัวละคร" in character_type:
+        char_rule = f"- เป็นวิดีโอโชว์สินค้าเพียวๆ ไม่มีคนหรือสัตว์ในภาพเลย (100% Product B-Roll)\n- เน้นดนตรีประกอบน่าตื่นเต้น ตัดต่อเร้าใจ\n"
+        scene_rule = f"2. ทุกซีนต้องเป็นภาพเจาะสินค้า (Product Shot) หรือภาพบรรยากาศสินค้า (Product in Environment) ห้ามวาดมนุษย์หรือตัวละครประหลาดลงในภาพเด็ดขาด ให้ใช้สไตล์ 'Macro photography, cinematic product shot, studio lighting, hyperrealistic, blank product without labels'.\n   - บังคับการเขียน Video Prompt ให้ใช้เทคนิคกล้องหวือหวา (เช่น Dynamic zoom in, Orbit around product, Dolly in, Cinematic pan) เหมือนถ่ายทำโฆษณาสินค้าไฮเอนด์"
+        
+        if no_voiceover:
+            char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
+            script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
+            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
+    elif fashion_mode:
+        char_rule = f"- โหมดแฟชั่น: เน้นการถ่ายแบบเสื้อผ้าเครื่องแต่งกาย (Fashion Lookbook/Try-on)\n- ตัวละครหลัก (นายแบบ/นางแบบ): {character_type}\n- สีผิว: {character_skin}\n- บุคลิกภาพ/รูปร่าง: {character_traits}\n- **บังคับเนื้อเรื่อง:** ตัวละครต้องสวมใส่เสื้อผ้าหรือสินค้าแฟชั่นอย่างมีสไตล์ วางโพสมั่นใจ\n"
+        scene_rule = f"2. ต้องมีฉากที่นำเสนอ \"ตัวสินค้าแฟชั่นบนตัวละครชัดๆ\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเดินแบบ/โพสท่า (Fashion/Lifestyle)\" ในซีนเล่าเรื่องให้เน้น 'Fashion lookbook style, full body shot or mid shot, model wearing the product perfectly, confident pose, cinematic fashion lighting'."
+        if no_voiceover:
+            char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
+            script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
+            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
+    else:
+        char_rule = f"- ตัวละครหลัก: {character_type}\n- สีผิว: {character_skin}\n- บุคลิกภาพ/รูปร่าง: {character_traits}\n"
+        scene_rule = f"2. ต้องมีฉากที่เจาะจงนำเสนอ \"ตัวสินค้าชัดๆ (Product Shot)\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเล่าเรื่อง/ไลฟ์สไตล์ (Story/Lifestyle)\" ที่มีตัวละครหลัก ในซีนเล่าเรื่องให้เน้น 'Subject interacting naturally with the product, lifestyle photography, expressive facial features, cinematic composition'."
+
+    system_instruction = f"""คุณคือผู้เชี่ยวชาญด้านการทำวิดีโอสั้น (TikTok/Reels) สำหรับ Affiliate Marketing หรือขายของออนไลน์
+    งานของคุณคือวิเคราะห์รูปภาพตัวอย่าง และสร้างแผนการทำวิดีโอ (Video Plan) จำนวน {num_scenes} ซีน
+    
+    ข้อกำหนดของตัวละครและเนื้อเรื่อง:
+    - ข้อมูลสินค้าเริ่มต้น: {product_details}
+    {char_rule}- สถานที่/ฉากหลัง (Background): {background}
+    - ซาวด์เอฟเฟกต์: {sfx_prompt}
+    - เสียงผู้พากย์ (Voice Type): {voice_type}
+    - อารมณ์น้ำเสียง (Emotion): {voice_emotion}
+    
+    กฎเหล็กเรื่องข้อความในภาพ (NO TEXT OVERLAY):
+    - **ห้าม** ให้เครื่องมือเจนภาพใส่ตัวหนังสือ, ป้ายกำกับ, โลโก้, ลายน้ำ, หรืออักษรใดๆ ลงในภาพเด็ดขาด
+    - สินค้าต้องเป็นแบบ Blank Product (ไม่มีฉลากตัวหนังสือ) เสมอ
+    
+    กติกาการจัดทำ:
+    1. ต้องสร้างซีนให้ได้จำนวน {num_scenes} ซีน เป๊ะๆ
+    {scene_rule}
+    {script_instruction}
+    4. เขียนบทพากย์ให้ผู้อ่านสามารถพูดจบได้ภายใน {scene_duration} วินาทีต่อซีน (ไม่สั้นไปและไม่ยาวไป)
+    5. เขียน image_prompt เป็นภาษาอังกฤษ เพื่อใช้ **เจนภาพนิ่งด้วย Gemini (Imagen 3) โดยเฉพาะ** 
+       - บังคับใส่คำว่า "Vertical 9:16 aspect ratio, pure visual, no typography, blank product, NO text overlays, NO letters, NO labels" ต่อท้ายเสมอ
+       - **สำคัญด้านความสมส่วนและความต่อเนื่อง:** ต้องสั่ง "Realistic anatomical proportions, perfectly scaled product compared to human subject, exactly the same character identity across all images"
+       - บรรยายรูปร่าง สี ดีไซน์ ของสินค้าให้ตรงปก ห้ามนำป้ายโฆษณา/ราคามาใส่ใน Prompt เด็ดขาด และห้ามสั่งให้วาดข้อความ
+    6. เขียน video_prompt เป็นภาษาอังกฤษ สำหรับ **ภาพเคลื่อนไหวพร้อมเสียง**
+       - บังคับใส่คำว่า "NO text overlays, NO letters, pure visual" เสมอ
+       - สั่งเฉพาะ 'Camera motion' เช่น 'Subtle camera pan right' และ 'Subject motion' ว่าอะไรเคลื่อนไหว
+       {video_voice_instruction}
+    7. ส่งข้อมูลกลับมาในรูปแบบ JSON ตาม Schema ที่กำหนดเท่านั้น ห้ามมีข้อความอื่นปน
+    
+    รูปแบบ Schema อ้างอิง:
+    {VideoPlan.model_json_schema()}
+    """
+    
+    print("กำลังเรียก Gemini ให้คิดสคริปต์แบบกว้างและครอบคลุมทุกมุมมอง...")
+    
+    # ส่งภาพทั้งหมดเข้าไปพร้อมคำสั่ง
+    request_contents = uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพทั้งหมดนี้ และสร้างสคริปต์วิดีโอ TikTok ให้หน่อยครับ ตอบกลับมาเป็นโครงสร้าง JSON ล้วนๆ"]
+    
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=request_contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            response_mime_type="application/json",
+            temperature=0.7,
+        )
+    )
+    
+    return response.text
+
+if __name__ == "__main__":
+    # วิธีทดสอบ:
+    # 1. สร้างโฟลเดอร์ assets/input ก่อน
+    # 2. เอาภาพสินค้าไปวางตั้งชื่อว่า sample_product.jpg
+    # 3. รันสคริปต์นี้
+    
+    test_image = "../assets/input/sample_product.jpg"
+    
+    if os.path.exists(test_image):
+        try:
+            result_json = generate_video_plan(test_image)
+            print("🚀 ผลลัพธ์ (JSON):")
+            print(result_json)
+        except Exception as e:
+            print(f"เกิดข้อผิดพลาด: {e}")
+    else:
+        print(f"ไม่พบไฟล์ภาพเตรียมไว้ทดสอบที่ {test_image}")
+        print("โปรดนำภาพสินค้าไปวางไว้ที่ตำแหน่งดังกล่าวก่อนรัน")

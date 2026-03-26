@@ -1,0 +1,7 @@
+streamlit
+pandas
+Pillow
+python-dotenv
+google-genai
+moviepy
+edge-tts
