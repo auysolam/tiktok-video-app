@@ -30,19 +30,23 @@ os.makedirs("../output", exist_ok=True)
 # ส่วนตั้งค่าโหมดและ API Key 
 with st.sidebar:
     st.header("⚙️ การตั้งค่าระบบ")
-    engine_mode = st.radio("🧠 โหมดการทำงาน", ["👨‍💻 แมนนวล (ไร้ API / สร้าง Prompt ไปก๊อปวาง)", "⚡ อัตโนมัติ (ใช้ API Key)"])
+    engine_mode = "👨‍💻 แมนนวล (ไร้ API / สร้าง Prompt ไปก๊อปวาง)"
+    st.markdown("**⚙️ โหมดการทำงาน:** 👨‍💻 แมนนวล (ปรุง Prompt ให้ไปก๊อปวาง)")
+    
+    ai_model_selection = st.selectbox("🧠 รุ่นของ Gemini", [
+        "gemini-2.5-flash (แนะนำ / เร็ว / โควต้าเบิ้ม)", 
+        "gemini-1.5-pro (ฉลาดสุด / โควต้าน้อยมาก)",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash"
+    ])
+    selected_model = ai_model_selection.split(" ")[0]
     
     api_key_input = st.text_input("🔑 ใส่ Gemini API Key ของคุณ:", type="password")
     if api_key_input:
         os.environ["GEMINI_API_KEY"] = api_key_input
         st.success("บันทึก API Key แล้ว")
         
-    if engine_mode == "⚡ อัตโนมัติ (ใช้ API Key)":
-        if not api_key_input:
-            st.warning("⚠️ โปรดใส่ API Key ก่อนใช้งานโหมดอัตโนมัติ")
-        st.markdown("**สถานะระบบ:** 🟢 โหมดอัตโนมัติทำงานเต็มรูปแบบ\n(ระบบจะใช้ Gemini API Key ของคุณเชื่อมต่อออโต้)")
-    else:
-        st.success("🟢 โหมดแมนนวลทำงาน\n(ไร้ลิมิต! ระบบช่วยปรุงโค้ดให้คุณไปก๊อปวาง หรือใช้ปุ่ม API ลัดได้ถ้ากรอก Key ด้านบนแล้ว)")
+    st.success("🟢 โหมดแมนนวลทำงาน\\n(ไร้ลิมิต! ระบบจะช่วยปรุงโค้ดให้คุณไปก๊อปวาง หรือใช้ปุ่ม API ลัดได้ถ้ากรอก Key ด้านบนแล้ว)")
 
 # ส่วนอัปโหลดภาพสินค้า
 uploaded_files = st.file_uploader("📸 อัปโหลดรูปภาพสินค้าของคุณทั้งหมด (รับได้ 1-4 ภาพ) (JPG, PNG, WEBP)", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
@@ -76,7 +80,7 @@ if uploaded_files:
                 else:
                     with st.spinner("AI กำลังวิเคราะห์รูปภาพ..."):
                         try:
-                            info = analyze_product_from_images(image_paths)
+                            info = analyze_product_from_images(image_paths, ai_model=selected_model)
                             st.session_state.product_info = info
                             st.success("✅ วิเคราะห์ข้อมูลสินค้าสำเร็จ!")
                         except Exception as e:
@@ -166,7 +170,8 @@ if uploaded_files:
                                     voice_emotion=voice_emotion,
                                     no_voiceover=no_voiceover,
                                     fashion_mode=fashion_mode,
-                                    fashion_item_type=fashion_item_type
+                                    fashion_item_type=fashion_item_type,
+                                    ai_model=selected_model
                                 )
                                 video_plan = VideoPlan.model_validate_json(json_result)
                                 st.session_state.video_plan_json = json_result
@@ -179,8 +184,8 @@ if uploaded_files:
                 st.subheader("📜 4. สร้าง Master Prompt สำหรับนำไปคุยกับ Gemini Advanced บนเว็บ")
                 if st.button("🚀 4.1 คลิกเพื่อสร้างคำสั่ง Prompt อัตโนมัติ", use_container_width=True):
                     
-                    script_instruction = '3. คิดบทพากย์ (script) ที่ดึงดูด น่าสนใจ ขายของแบบเนียนๆ โดยต้องสอดคล้องกับ "เสียงผู้พากย์" และ "อารมณ์น้ำเสียง" อย่างเคร่งครัด'
-                    video_voice_instruction = f'- **ความต่อเนื่องของเสียงและภาพ:** บังคับให้ใส่คำสั่งเจาะจงเสียงว่า "Include synchronized voiceover narration in {voice_type} voice with {voice_emotion} tone, EXACTLY the same voice identity and vocal characteristics across all clips, character remains identically matched to previous scenes"'
+                    script_instruction = '3. คิดบทพากย์ (script) ที่ดึงดูด น่าสนใจ เป็นเรื่องราวเนื้อหาต่อเนื่องกันแบบเนียนๆ ตั้งแต่ซีนแรกจนถึงซีนสุดท้าย (ห้ามตัดจบดื้อๆ) และสอดคล้องกับ "เสียงผู้พากย์" และ "อารมณ์น้ำเสียง" อย่างเคร่งครัด'
+                    video_voice_instruction = f'- **ความเนียนระดับ Extend:** บังคับสั่งให้เสียงและภาพต่อกันเนียนที่สุดตั้งแต่ซีน 1 ยันซีนสุดท้าย ใส่คำสั่งว่า "Continuous seamless extension from previous scene, EXACTLY the same character, same environment. Include synchronized voiceover narration in {voice_type} voice with {voice_emotion} tone, EXACTLY the same voice identity across all clips"'
                     
                     if no_char_mode:
                         char_rule = f"- เป็นวิดีโอโชว์สินค้าเพียวๆ ไม่มีคนหรือสัตว์ในภาพเลย (100% Product B-Roll)\n- เน้นดนตรีประกอบน่าตื่นเต้น ตัดต่อเร้าใจ\n"
@@ -221,7 +226,9 @@ if uploaded_files:
    - **สไตล์ภาพถ่ายสมจริง:** ให้ใส่คำว่า "Shot on modern smartphone, casual everyday lifestyle photo, deep depth of field (f/8.0), everything in focus, NO bokeh, NO blurry background, sharp background, natural authentic look" เสมอ เพื่อไม่ให้ภาพดูเจาะจงหน้าชัดหลังเบลอเกินจริง
    - บรรยายแสงเงา บรรยากาศ มุมกล้อง (Lighting, Mood, Camera angle) ให้สวยงามสมจริง ห้ามสั่งให้วาดป้ายราคา/ข้อความ
 6. เขียน video_prompt เป็นภาษาอังกฤษ สำหรับ **เจนวนิเมชัน+เสียง บน Google Labs Flow**
-   - การขยับ: เน้นสั่งเฉพาะ 'Camera motion' และ 'Subject motion' อย่างกระชับ พร้อมสั่ง "NO text overlays"
+   - **สไตล์เรียลๆ ห้ามเบลอฉากหลัง:** บังคับเพิ่ม "Raw unedited smartphone footage, UGC style, extreme deep depth of field, everything in absolute focus, NO bokeh, completely sharp background, NO blurry background"
+   - **ความต่อเนื่องแบบ Extend เนียนๆ:** ตั้งแต่ซีน 2 เป็นต้นไป ให้บังคับสั่ง "Continuous seamless extension from the exact previous frame, exact same subject, exact same environment, no cuts, perfectly smooth transition"
+   - การขยับ: เน้นสั่งเฉพาะ 'Camera motion' และ 'Subject motion' รวบกับ "NO text overlays" อย่างกระชับ
    {video_voice_instruction}
 7. ส่งข้อมูลกลับมาเป็นโค้ด JSON ก้อนเดียวเท่านั้น ห้ามมีคำอธิบายเพิ่มเติม
 
@@ -234,14 +241,19 @@ if uploaded_files:
                     if os.getenv("GEMINI_API_KEY"):
                         st.markdown("---")
                         st.success("💡 **ตรวจพบ API Key ในระบบ:** กำลังลัดขั้นตอน ส่ง Prompt นี้ให้ Gemini ร่างบทให้คุณอัตโนมัติ...")
-                        with st.spinner("กำลังรับข้อมูลสคริปต์จาก AI... (รอสักครู่)"):
+                        with st.spinner("กำลังรับข้อมูลสคริปต์จาก AI... (รอสักครู่นะครับ)"):
                             try:
                                 from core.gemini_engine import run_manual_prompt_with_images
-                                result_json = run_manual_prompt_with_images(master_prompt, image_paths)
+                                result_json = run_manual_prompt_with_images(master_prompt, image_paths, ai_model=selected_model)
                                 st.session_state.demo_pasted_json = result_json
                                 st.success("✅ ได้รับบทมาเรียบร้อย! ระบบนำโค้ดไปวางในกล่อง 4.5 ด้านล่างให้แล้ว เลื่อนไปกดปุ่มประมวลผลต่อได้เลยครับ")
                             except Exception as e:
-                                st.error(f"เกิดข้อผิดพลาดในการเชื่อมต่อ: {e}")
+                                error_msg = str(e)
+                                if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "quota" in error_msg.lower():
+                                    st.warning(f"⏳ **อ๊ะ! โควต้า AI ของคุณ (รุ่น {selected_model}) เต็มชั่วคราวซะแล้ว**", icon="🤖")
+                                    st.info("💡 **คำแนะนำวิธีแก้ปัญหาง่ายๆ:**\\n\\n1. เลื่อนไปที่แถบตั้งค่าด้านซ้ายบนด่วนๆ 🔄\\n2. ลองเปลี่ยน **'รุ่นของ Gemini'** เป็นตัวอื่น (เช่น หนีไปซบ `gemini-1.5-flash` หรือ `gemini-2.0-flash` ชั่วคราว)\\n3. เสร็จแล้วกดปุ่มทำงานใหม่อีกครั้งได้เลยครับ ลุย! 🚀", icon="💡")
+                                else:
+                                    st.error(f"❌ เกิดข้อผิดพลาดในการเชื่อมต่อ API: {error_msg}")
                 
                 st.markdown("---")
                 st.subheader("📥 4.5 วางผลลัพธ์จาก Gemini ลงที่นี่")
@@ -364,11 +376,16 @@ if uploaded_files:
                             post_img_paths.append(path)
                         
                         from core.gemini_engine import analyze_product_from_images
-                        result_json = analyze_product_from_images(post_img_paths)
+                        result_json = analyze_product_from_images(post_img_paths, ai_model=selected_model)
                         st.session_state.custom_post_json = result_json
                         st.success("✅ ร่างแคปชั่นเสร็จสมบูรณ์!")
                     except Exception as e:
-                        st.error(f"เกิดข้อผิดพลาดในการวิเคราะห์: {e}")
+                        error_msg = str(e)
+                        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "quota" in error_msg.lower():
+                            st.warning(f"⏳ **อ๊ะ! โควต้า AI ของคุณ (รุ่น {selected_model}) เต็มชั่วคราวซะแล้ว**", icon="🤖")
+                            st.info("💡 **คำแนะนำวิธีแก้ปัญหาง่ายๆ:**\\n\\n1. เลื่อนไปที่แถบตั้งค่าด้านซ้ายบนด่วนๆ 🔄\\n2. ลองเปลี่ยน **'รุ่นของ Gemini'** เป็นตัวอื่น (เช่น หนีไปซบ `gemini-1.5-flash` หรือ `gemini-2.0-flash` ชั่วคราว)\\n3. เสร็จแล้วกดปุ่มทำงานใหม่อีกครั้งได้เลยครับ ลุย! 🚀", icon="💡")
+                        else:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการวิเคราะห์: {error_msg}")
                         
         if st.session_state.get('custom_post_json'):
             try:

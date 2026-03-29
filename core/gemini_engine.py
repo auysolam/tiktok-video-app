@@ -14,7 +14,7 @@ import os
 import time
 import streamlit as st
 
-def _safe_generate_content(client, model, contents, config, max_retries=3):
+def _safe_generate_content(client, model, contents, config, max_retries=3, fallback_prompt=None):
     """
     ฟังก์ชันช่วยรัน API และรออัตโนมัติหากเจอ (429 RESOURCE_EXHAUSTED)
     """
@@ -25,13 +25,34 @@ def _safe_generate_content(client, model, contents, config, max_retries=3):
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
                 if attempt < max_retries - 1:
-                    wait_time = 35  # รออย่างน้อย 35 วินาทีตามที่ Google แนะนำในบัค
                     try:
-                        # ลองพ่นข้อความออก UI ให้ผู้ใช้ทราบว่าคิวเต็มกำลังรอ
-                        st.warning(f"⚠️ ระบบติดเครื่องหมาย Rate Limit กำลังรอ {wait_time} วินาทีเพื่อโหลดต่ออัตโนมัติ (รอบที่ {attempt+1})")
-                    except:
+                        st.warning(f"⚠️ ระบบติดเครื่องหมาย Rate Limit (โควต้าเต็มชั่วคราว) โปรดรอสัก 30 วินาทีแล้วกดปุ่มใหม่อีกครั้งนะครับ")
+                        
+                        # สร้างระบบก๊อปสำรองรวมถึง System Instruction (ถ้ามี)
+                        backup_text = ""
+                        
+                        if fallback_prompt:
+                            backup_text = fallback_prompt
+                        else:
+                            sys_instruct = getattr(config, "system_instruction", None)
+                            if sys_instruct:
+                                backup_text += f"[คำสั่งหลักสำหรับ AI (System Instruction)]:\n{sys_instruct}\n\n"
+                                backup_text += f"[ข้อมูลที่ต้องนำไปวิเคราะห์]:\n"
+                                
+                            if isinstance(contents, list):
+                                for item in contents:
+                                    if isinstance(item, str):
+                                        backup_text += item + "\n"
+                            elif isinstance(contents, str):
+                                backup_text += contents
+                            
+                        if backup_text.strip():
+                            st.info("💡 **ระบบก๊อปสำรอง (Backup Prompt):** ระหว่างรอ... คุณสามารถก๊อปปี้คำสั่งนี้ไปให้ Gemini ในเว็บร่างบทแทนได้เลยครับ ถ้ารีบ!")
+                            st.code(backup_text.strip(), language="text")
+                    except Exception as try_e:
                         pass
-                    time.sleep(wait_time)
+                    # หยุดการทำงานทันทีเพื่อให้ UI แสดงผลรหัสสำรอง ไม่ต้อง sleep แช่แข็งจอผู้ใช้
+                    raise Exception("429 Rate Limit - แสดงรหัสสำรองให้ผู้ใช้แล้ว")
                 else:
                     raise e
             else:
@@ -70,15 +91,21 @@ def generate_image_from_prompt(prompt: str, output_path: str):
     except Exception as e:
         print(f"Imagen Generation Error: {e}")
         error_msg = str(e)
-        # ถ้าเจอปัญหา Quota, API Key ไม่อนุญาต หรืออื่นๆ จะวาด Mockup พร้อมอธิบาย Error ให้ผู้ใช้รู้ตัว
-        from PIL import Image, ImageDraw
+        if "404" in error_msg and ("imagen" in error_msg.lower() or "not found" in error_msg.lower()):
+            error_msg = "Google API Key ของคุณยังไม่ได้รับสิทธิ์ใช้งานระบบวาดภาพ Imagen 3 (ฟีเจอร์นี้อาจต้องเปิดใช้งานระดับสูงหรือเสียเงินใน Google Cloud) คำแนะนำ: กรุณาใช้ปุ่ม 'ก๊อปปี้ไปเจนบนเว็บ' ในโหมดแมนนวลแทนครับ"
+        elif "429" in error_msg or "RESOURCE" in error_msg:
+            error_msg = "โควต้า AI เต็มชั่วคราว โปรดรอสักครู่แล้วลองใหม่นะฮะ"
+            
+        # ถ้าเจอปัญหา จะวาด Mockup พร้อมคำแนะนำภาษาไทยอธิบาย Error ให้ผู้ใช้รู้ตัวแบบสวยๆ
+        from PIL import Image, ImageDraw, ImageFont
         img = Image.new('RGB', (1080, 1920), color = (73, 109, 137))
         d = ImageDraw.Draw(img)
-        d.text((100,100), f"Mockup Scene\n(Gemini API Error: {error_msg})\nPrompt: {prompt[:50]}...", fill=(255,255,0))
+        # เนื่องจากไม่มีฟอนต์ไทย อาจจะอ่านยากถ้าเรนเดอร์ลงรูป งั้นใส่แค่คำสั้นๆ ลงรูป
+        d.text((50, 500), f"API Error / Cannot Generate Image\n\nTips: Please use Manual Mode\ninstead of Auto Mode.", fill=(255,255,255))
         img.save(output_path)
         return False, error_msg
 
-def analyze_product_from_images(image_paths: List[str]) -> str:
+def analyze_product_from_images(image_paths: List[str], ai_model: str = 'gemini-2.5-flash') -> str:
     """
     วิเคราะห์ภาพสินค้าและดึงจุดขาย (Sales Pitch / Product Details) ออกมาเป็นข้อความ
     """
@@ -110,19 +137,27 @@ def analyze_product_from_images(image_paths: List[str]) -> str:
 ส่งข้อมูลกลับมาในรูปแบบ JSON ตาม Schema นี้เท่านั้น:
 {TikTokPostData.model_json_schema()}"""
     
+    user_backup_prompt = """ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพและร่างรายละเอียดสำหรับการโพสต์ขาย TikTok ให้หน่อย
+1.คำเขียนหน้าปกคลิป
+2.คำอธิบายสินค้า ไม่ต้องยาวมาก เน้นดึงดูด โปรโมชั่น ราคา 
+3.#แฮชแท็ก 
+4.ชื่อสินค้า ราคา ความยาวไม่เกิน 30 คำ
+5.ข้อความแปะคลิป เช่น ราคา โปรโมชั่น เน้นให้ว้าว หยุดดูเลย แต่ข้อความสั้นๆ ไม่ต้องยาว"""
+
     response = _safe_generate_content(
         client=client,
-        model='gemini-2.5-flash',
+        model=ai_model,
         contents=uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพและร่างรายละเอียดสำหรับการโพสต์ขาย TikTok ให้หน่อย ตอบกลับเป็น JSON เท่านั้น"],
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
             response_mime_type="application/json",
             temperature=0.7,
-        )
+        ),
+        fallback_prompt=user_backup_prompt
     )
     return response.text
 
-def generate_video_plan(image_paths: List[str], product_details: str, character_type: str, character_skin: str, character_traits: str, use_sfx: bool, num_scenes: int, scene_duration: int, product_scene_count: int, background: str, voice_type: str, voice_emotion: str, no_voiceover: bool = False, fashion_mode: bool = False, fashion_item_type: str = "") -> VideoPlan:
+def generate_video_plan(image_paths: List[str], product_details: str, character_type: str, character_skin: str, character_traits: str, use_sfx: bool, num_scenes: int, scene_duration: int, product_scene_count: int, background: str, voice_type: str, voice_emotion: str, no_voiceover: bool = False, fashion_mode: bool = False, fashion_item_type: str = "", ai_model: str = 'gemini-2.5-flash') -> VideoPlan:
     """
     รับรายการภาพสินค้าและใช้ Gemini สร้างแผนการทำวิดีโอ (JSON) กลับมา โดยอิงตามการตั้งค่าตัวละครและโครงสร้าง
     """
@@ -148,8 +183,8 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
     # กำหนดเนื้อหา Sound Effect
     sfx_prompt = "ให้ใส่เสียง Sound Effects หรือ BGM กวนๆ ตลกๆ หรือตื่นเต้น แทรกในวงเล็บของ script ด้วย เช่น [เสียงตู้ม] หรือ [เสียงหัวเราะ]" if use_sfx else "ห้ามใส่ Sound Effects ลงในบทพูด ให้ใช้เสียงพากย์ล้วนๆ"
 
-    script_instruction = '3. คิดบทพากย์ (script) ที่ดึงดูด น่าสนใจ ขายของแบบเนียนๆ โดยต้องสอดคล้องกับ "เสียงผู้พากย์" และ "อารมณ์น้ำเสียง" ที่กำหนดไว้ข้างต้นอย่างเคร่งครัด ใช้ภาษาไทยสไตล์วัยรุ่น TikTok'
-    video_voice_instruction = f'- **สำคัญด้านเสียง:** ต้องบังคับใน Prompt ให้เครื่องมือสร้างวิดีโอจ่ายเสียงที่ต่อเนื่องกัน โดยสั่งว่า "Include perfectly synchronized voiceover narration in {voice_type} voice with {voice_emotion} tone, EXACTLY the same voice identity and vocal pitch as previous scenes"'
+    script_instruction = '3. คิดบทพากย์ (script) ที่ดึงดูด น่าสนใจ เป็นเรื่องราวเนื้อหาต่อเนื่องกันแบบเนียนๆ ตั้งแต่ซีนแรกจนถึงซีนสุดท้าย (ห้ามตัดจบดื้อๆ) และสอดคล้องกับ "เสียงผู้พากย์" และ "อารมณ์น้ำเสียง" ที่กำหนดไว้ข้างต้นอย่างเคร่งครัด ใช้ภาษาไทยสไตล์วัยรุ่น TikTok'
+    video_voice_instruction = f'- **สำคัญด้านเสียงและภาพต่อเนื่อง:** ต้องบังคับใน Prompt ให้เครื่องมือสร้างวิดีโอจ่ายทั้งภาพและเสียงที่ต่อเนื่องกัน โดยสั่งว่า "Continuous seamless extension from previous scene, EXACTLY the same character, same environment. Include perfectly synchronized voiceover narration in {voice_type} voice with {voice_emotion} tone, EXACTLY the same voice identity as previous clips"'
 
     # คำสั่ง (Prompt) ที่บังคับให้ AI ทำตาม    
     if "ไม่มีตัวละคร" in character_type:
@@ -193,13 +228,14 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
     5. เขียน image_prompt เป็นภาษาอังกฤษ เพื่อใช้ **เจนภาพนิ่งด้วย Gemini (Imagen 3) โดยเฉพาะ** 
        - บังคับใส่คำว่า "Vertical 9:16 aspect ratio, pure visual, no typography, blank product, NO text overlays, NO letters, NO labels" ต่อท้ายเสมอ
        - **สำคัญด้านความสมส่วนและความต่อเนื่อง:** ต้องสั่ง "Realistic anatomical proportions, perfectly scaled product compared to human subject, exactly the same character identity across all images"
-       - **สไตล์ภาพถ่ายจากมือถือสมจริง:** ให้ระบุลงใน Prompt เสมอว่า "Shot on modern smartphone, casual lifestyle photo, deep depth of field, everything in focus, NO bokeh, NO blurry background, sharp background, natural authentic look" เพื่อหลีกเลี่ยงภาพหน้าชัดหลังเบลอที่ดูไม่สมจริง
+       - **สไตล์ภาพถ่ายจากมือถือเรียลๆ ร้อยเปอร์เซ็นต:** ให้ระบุลงใน Prompt ทุกซีนว่า "Raw unedited smartphone footage, casual lifestyle, deep depth of field, everything in focus, NO bokeh, NO blurry background, sharp background, natural authentic look" ห้ามเจาะหน้าชัดหลังเบลอเด็ดขาด
        - บรรยายรูปร่าง สี ดีไซน์ ของสินค้าให้ตรงปก ห้ามนำป้ายโฆษณา/ราคามาใส่ใน Prompt เด็ดขาด และห้ามสั่งให้วาดข้อความ
     6. เขียน video_prompt เป็นภาษาอังกฤษ สำหรับ **ภาพเคลื่อนไหวพร้อมเสียง**
        - บังคับใส่คำว่า "NO text overlays, NO letters, pure visual" เสมอ
-       - **สไตล์การถ่ายทำ:** บังคับใส่คำว่า "Handheld camera shot on smartphone, Reels dynamic style, normal speed, NO slow motion" เพื่อให้ดูเหมือนถ่ายจากมือถือ
-       - **ความสมบูรณ์ของร่างกาย:** บังคับใส่คำว่า "Anatomically correct, continuous smooth natural movement, NO missing limbs, NO extra fingers, consistent body parts" เพื่อป้องกันภาพแขนขาขาดหาย
-       - สั่งเฉพาะ 'Camera motion' เช่น 'Handheld subtle shake, pan right' และ 'Subject motion' ว่าอะไรเคลื่อนไหวให้ต่อเนื่องและสมจริง
+       - **สไตล์ถ่ายจากมือถือแบบเรียลๆ (Raw/UGC):** บังคับใส่คำว่า "Raw unedited smartphone footage, vertical phone camera, everyday UGC style, realistic handheld subtle shake" ทุกซีน
+       - **ฉากหลังต้องชัดทั้งหมดห้ามเบลอ:** บังคับย้ำไปเลยว่า "Extreme deep depth of field, everything in absolute focus, completely sharp background, NO bokeh, NO blurry background" ห้ามวิดีโอออกมาหน้าชัดหลังเบลอเด็ดขาด
+       - **ความต่อเนื่องตั้งแต่ต้นจนจบแบบ Extend:** บังคับใส่ตั้งแต่วิดีโอซีน 2 เป็นต้นไปว่า "Continuous seamless extension from the exact previous frame, exact same subject, exact same environment, no cuts, perfectly smooth transition" เพื่อให้ทั้งภาพและบทพากย์เป็นเนื้อเดียวกันที่สุด
+       - ระบุ 'Camera motion' และ 'Subject motion' เพิ่มเติมตามบท
        {video_voice_instruction}
     7. ส่งข้อมูลกลับมาในรูปแบบ JSON ตาม Schema ที่กำหนดเท่านั้น ห้ามมีข้อความอื่นปน
     
@@ -214,7 +250,7 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
     
     response = _safe_generate_content(
         client=client,
-        model='gemini-2.5-flash',
+        model=ai_model,
         contents=request_contents,
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -225,7 +261,7 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
     
     return response.text
 
-def run_manual_prompt_with_images(prompt: str, image_paths: List[str]) -> str:
+def run_manual_prompt_with_images(prompt: str, image_paths: List[str], ai_model: str = 'gemini-2.5-flash') -> str:
     """ ฟังก์ชันลัดสำหรับโหมดแมนนวล ยิง Prompt เข้า API เพื่อเอา JSON กลับมา """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -242,7 +278,7 @@ def run_manual_prompt_with_images(prompt: str, image_paths: List[str]) -> str:
             
     response = _safe_generate_content(
         client=client,
-        model='gemini-2.5-flash',
+        model=ai_model,
         contents=uploaded_images + [prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
