@@ -103,13 +103,19 @@ if uploaded_files:
                 if product_only_mode or fashion_mode:
                     no_voiceover = st.checkbox("🚫 ไม่เอาบทพูด (เน้นดนตรีประกอบอย่างเดียว)", value=False)
 
+                char_options = [
+                    "สาวไทย (วัยรุ่น)", "หนุ่มไทย (วัยรุ่น)", "สาวไทย (วัยทำงาน)", "หนุ่มไทย (วัยทำงาน)",
+                    "นางแบบอินเตอร์", "นายแบบอินเตอร์", "คุณแม่ (แม่และเด็ก)", "แม่บ้าน", "พ่อบ้าน", 
+                    "แม่ค้า", "พ่อค้า", "ช่างซ่อม/ช่างเทคนิค", "พนักงานออฟฟิศ", "นักเรียน/นักศึกษา", 
+                    "อินฟลูเอนเซอร์/ครีเอเตอร์", "ไรเดอร์/พนักงานส่งของ", "เชฟ/คนทำอาหาร", 
+                    "ผู้หญิงทั่วไป", "ผู้ชายทั่วไป", "เด็กเล็ก", "คนแก่", "ครอบครัวพ่อแม่ลูก", 
+                    "คู่รัก", "สุนัข", "แมว", "อื่นๆ"
+                ]
+
                 if fashion_mode:
                     fashion_item_type = st.selectbox("👗 2.1.2 ประเภทสินค้าแฟชั่น", ["เสื้อ (Tops)", "กางเกง/กระโปรง (Bottoms)", "ชุดเดรส/ชุดเซท (Dress/Sets)", "กระเป๋า (Bags)", "รองเท้า (Shoes)", "หมวก/เครื่องประดับ (Accessories)", "อื่นๆ"])
-                    char_options = ["สาวไทย (วัยรุ่น)", "หนุ่มไทย (วัยรุ่น)", "สาวไทย (วัยทำงาน)", "หนุ่มไทย (วัยทำงาน)", "นางแบบอินเตอร์", "นายแบบอินเตอร์", "เด็กเล็ก", "คนแก่", "อื่นๆ"]
                 else:
                     fashion_item_type = ""
-                    char_options = ["สาวไทย (วัยรุ่น)", "หนุ่มไทย (วัยรุ่น)", "สาวไทย (วัยทำงาน)", "หนุ่มไทย (วัยทำงาน)", "คุณแม่ (แม่และเด็ก)", "แม่บ้าน", "พ่อบ้าน", "แม่ค้า", "พ่อค้า", "ช่างซ่อม/ช่างเทคนิค", "พนักงานออฟฟิศ", "นักเรียน/นักศึกษา", "อินฟลูเอนเซอร์/ครีเอเตอร์", "ไรเดอร์/พนักงานส่งของ", "เชฟ/คนทำอาหาร", "ผู้หญิงทั่วไป", "ผู้ชายทั่วไป", "คนแก่", "ครอบครัวพ่อแม่ลูก", "คู่รัก", "สุนัข", "แมว", "อื่นๆ"]
-
                 char_type = st.selectbox("👤 2.1 เลือกตัวละครหลัก", char_options, index=0, disabled=product_only_mode)
                 if char_type == "อื่นๆ":
                     char_type = st.text_input("ระบุตัวละครอื่นๆ:", disabled=product_only_mode)
@@ -131,15 +137,28 @@ if uploaded_files:
                     ["สวยน่ารัก", "เซ็กซี่เย้ายวน", "หน้าอกใหญ่", "หุ่นนายแบบ/นางแบบ", "หล่อเท่สมาร์ท", "แต่งตัวภูมิฐานดูแพง", "ตลกขบขัน", "ร่าเริงสดใส", "ลึกลับน่าค้นหา"],
                     disabled=no_char_mode
                 )
-                use_sfx = st.radio("🔊 2.5 ใส่ซาวด์เอฟเฟกต์ (Sound Effects) ในสคริปต์?", ["ใส่ซาวด์ (เน้นลูกเล่นตื่นเต้น)", "ไม่ใส่ (เน้นพากย์เสียงอย่างเดียว)"])
+                use_sfx = st.radio("🔊 2.5 ใส่ซาวด์เอฟเฟกต์ (Sound Effects) ในสคริปต์?", [
+                    "ใส่ซาวด์ (เน้นลูกเล่นตื่นเต้น)", 
+                    "ไม่ใส่ซาวด์ (เน้นพากย์เสียงอย่างเดียว)",
+                    "ไม่ใส่ซาวด์ ไม่พากย์เสียง (เน้นดิบๆ เรียลๆ ภาพไม่กระตุกตามเสียง)"
+                ])
                 
+            if "ไม่พากย์เสียง" in use_sfx:
+                no_voiceover = True
+
             with st.expander("🎙️ 2.6 - 2.7 เสียงผู้พากย์", expanded=True):
                 voice_type = st.selectbox("🎙️ 2.6 เสียงผู้พากย์ (Voice Type)", ["ไม่ระบุ (สุ่มให้เหมาะสม)", "ผู้หญิง", "ผู้ชาย", "เด็ก", "คนแก่", "หุ่นยนต์/AI", "สัตว์ (เช่น หมา/แมวบรรยาย)"], disabled=no_voiceover)
                 voice_emotion = st.selectbox("🎭 2.7 อารมณ์ในการพากย์ (Emotion)", ["ไม่ระบุ (สุ่มให้เหมาะสม)", "ตื่นเต้นเร้าใจ (Energetic)", "ตลกขบขัน/กวนๆ (Funny)", "จริงจัง/น่าเชื่อถือ (Professional)", "กระซิบ/น่าค้นหา (ASMR)", "ดราม่า/ซึ้งกินใจ", "สดใส/อ้อนๆ น่ารัก"], disabled=no_voiceover)
     
             traits_str = ", ".join(char_traits) if char_traits else "ทั่วไป"
-            sfx_flag = True if "ใส่" in use_sfx and "ไม่ใส่" not in use_sfx else False
-            sfx_prompt = "ให้ใส่เสียง Sound Effects หรือ BGM กวนๆ ตลกๆ หรือตื่นเต้น แทรกในวงเล็บของ script ด้วย เช่น [เสียงตู้ม] หรือ [เสียงหัวเราะ]" if sfx_flag else "ห้ามใส่ Sound Effects ลงในบทพูด ให้ใช้เสียงพากย์ล้วนๆ"
+            no_bgm = "ไม่ใส่ซาวด์" in use_sfx
+            sfx_flag = not no_bgm
+            
+            if no_voiceover and no_bgm:
+                sfx_prompt = "ห้ามใส่ Sound Effects, ห้ามใส่ BGM และห้ามพากย์เสียงใดๆ ลงในสคริปต์เด็ดขาด (No voiceover, No SFX) เพื่อให้วิดีโอออกมาภาพนิ่งดิบๆ เรียลๆ ไม่ขยับตามเสียง"
+            else:
+                sfx_prompt = "ให้ใส่เสียง Sound Effects หรือ BGM กวนๆ ตลกๆ หรือตื่นเต้น แทรกในวงเล็บของ script ด้วย เช่น [เสียงตู้ม] หรือ [เสียงหัวเราะ]" if sfx_flag else "ห้ามใส่ Sound Effects ลงในบทพูด ให้ใช้เสียงพากย์ล้วนๆ"
+
     
             st.markdown("---")
             st.subheader("⚙️ 3. โครงสร้างวิดีโอ (Video Structure)")
@@ -175,7 +194,8 @@ if uploaded_files:
                                     no_voiceover=no_voiceover,
                                     fashion_mode=fashion_mode,
                                     fashion_item_type=fashion_item_type,
-                                    ai_model=selected_model
+                                    ai_model=selected_model,
+                                    no_bgm=no_bgm
                                 )
                                 video_plan = VideoPlan.model_validate_json(json_result)
                                 st.session_state.video_plan_json = json_result
@@ -195,19 +215,30 @@ if uploaded_files:
                         char_rule = f"- เป็นวิดีโอโชว์สินค้าเพียวๆ ไม่มีคนหรือสัตว์ในภาพเลย (100% Product B-Roll)\n- เน้นดนตรีประกอบน่าตื่นเต้น ตัดต่อเร้าใจ\n"
                         scene_rule = f"2. ทุกซีนต้องเป็นภาพเจาะสินค้า (Product Shot) หรือภาพบรรยากาศสินค้า (Product in Environment) ห้ามวาดมนุษย์หรือตัวละครประหลาดลงในภาพเด็ดขาด\n   - บังคับการเขียน Video Prompt ให้ใช้เทคนิคกล้องหวือหวา (เช่น Dynamic zoom in, Orbit around product, Dolly in, Cinematic pan) เหมือนถ่ายทำโฆษณาสินค้าไฮเอนด์"
                         if no_voiceover:
-                            script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
-                            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
                             char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
+                            if no_bgm:
+                                script_instruction = '3. **ห้ามแต่งบทพูดและซาวด์เด็ดขาด** ให้ปล่อยฟิลด์ script ว่างไว้'
+                                video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, NO background music, perfectly silent, RAW footage"'
+                            else:
+                                script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
+                                video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
                     elif fashion_mode:
                         char_rule = f"- โหมดแฟชั่น (ประเภทสินค้า: {fashion_item_type}): เน้นการถ่ายทอดรูปทรง เนื้อผ้า และความพริ้วไหวของสินค้า ไม่เน้นหน้าตานายแบบ/นางแบบ\n- ตัวละครหลัก: {char_type}\n- สีผิว: {char_skin}\n- บุคลิกภาพ/รูปร่าง: {traits_str}\n- **บังคับเนื้อเรื่อง:** กำหนดให้ตัวละครขยับตัวเพื่อโชว์สินค้า เช่น เดินเข้าหากล้อง, หมุนตัว, สะบัดชายเสื้อ/กระโปรง, เดินเหลียวหลัง\n- **ห้ามเปลี่ยนสีและดีไซน์เด็ดขาด:** กำชับใน Image prompt เสมอให้สั่งว่า \"Subject wearing/holding EXACTLY the same product from reference image, maintaining EXACT same color, exact same design, and same texture without any modifications\"\n"
                         scene_rule = f"2. ต้องมีฉากที่นำเสนอ \"สินค้าประเภท {fashion_item_type} ชัดๆ\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเดินแบบ/โพสท่า\" ให้เน้น 'Fashion lookbook, DO NOT focus closely on the face. Focus entirely on the {fashion_item_type} details, textures, and product features'."
                         if no_voiceover:
-                            script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
-                            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"\n   - **ท่าทางการเคลื่อนไหวภาพ:** สั่งกำกับใน Video prompt เสมอให้ "Subject modeling the product, walking like a runway model, spinning around gracefully, dynamic posing to showcase product. Deep depth of field, NO bokeh, NO blurry background, sharp background"'
                             char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
+                            if no_bgm:
+                                script_instruction = '3. **ห้ามแต่งบทพูดและซาวด์เด็ดขาด** ให้ปล่อยฟิลด์ script ว่างไว้'
+                                video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, NO background music, perfectly silent, RAW footage"\n   - **ท่าทางการเคลื่อนไหวภาพ:** สั่งกำกับใน Video prompt เสมอให้ "Subject modeling the product, walking like a runway model, spinning around gracefully, dynamic posing to showcase product. Deep depth of field, NO bokeh, NO blurry background, sharp background"'
+                            else:
+                                script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
+                                video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"\n   - **ท่าทางการเคลื่อนไหวภาพ:** สั่งกำกับใน Video prompt เสมอให้ "Subject modeling the product, walking like a runway model, spinning around gracefully, dynamic posing to showcase product. Deep depth of field, NO bokeh, NO blurry background, sharp background"'
                     else:
                         char_rule = f"- ตัวละครหลัก: {char_type}\n- สีผิว: {char_skin}\n- บุคลิกภาพ/รูปร่าง: {traits_str}\n"
                         scene_rule = f"2. ต้องมีฉากที่เจาะจงนำเสนอ \"ตัวสินค้าชัดๆ (Product Shot)\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเล่าเรื่อง/ไลฟ์สไตล์ (Story/Lifestyle)\" ที่มีตัวละครหลัก"
+                        if no_voiceover and no_bgm: # Edge case general mode without voice and bgm
+                            script_instruction = '3. **ห้ามแต่งบทพูดและซาวด์เด็ดขาด** ให้ปล่อยฟิลด์ script ว่างไว้'
+                            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, NO background music, perfectly silent, RAW footage"'
 
                     master_prompt = f"""คุณคือผู้เชี่ยวชาญด้านการทำวิดีโอสั้น (TikTok/Reels) สำหรับ Affiliate Marketing หรือขายของออนไลน์
 งานของคุณคือวิเคราะห์ 'ภาพสินค้า' ที่ฉันแนบมานี้ และสร้างแผนการทำวิดีโอ (Video Plan) จำนวน {num_scenes} ซีน
