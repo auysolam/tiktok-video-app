@@ -81,24 +81,6 @@ if uploaded_files:
                             st.success("✅ วิเคราะห์ข้อมูลสินค้าสำเร็จ!")
                         except Exception as e:
                             st.error(f"เกิดข้อผิดพลาด: {e}")
-            if st.session_state.product_info:
-                try:
-                    import json
-                    post_data = json.loads(st.session_state.product_info)
-                    st.markdown("### 📝 ข้อมูลสำหรับโพสต์ขาย (TikTok)")
-                    
-                    st.info(f"**📌 1. รายละเอียดสินค้า:**\n{post_data.get('product_details', '')}")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.success(f"**💬 2. ข้อความพาดหัวคลิป (Overlay Text):**\n{post_data.get('overlay_text', '')}")
-                        st.warning(f"**🛒 3. ชื่อปุ่มตะกร้า/ลิงก์:**\n{post_data.get('link_title', '')}")
-                    with col2:
-                        st.info(f"**📝 4. แคปชั่น (Caption):**\n{post_data.get('post_caption', '')}")
-                        st.write(f"**#️⃣ 5. แฮชแท็ก:**\n{post_data.get('hashtags', '')}")
-                except Exception as e:
-                    with st.expander("📄 รายละเอียดและสคริปต์ตั้งต้น"):
-                        st.write(st.session_state.product_info)
         else:
             # โหมดแมนนวล ข้ามการยิง API วิเคราะห์สินค้า และถือว่ามีข้อมูลเริ่มต้นเลยเพื่อปลดล็อคขั้นตอนถัดไป
             if not st.session_state.product_info:
@@ -335,3 +317,24 @@ if uploaded_files:
                         
             except Exception as e:
                 st.error(f"ข้อผิดพลาดระหว่างแสดงผลสคริปต์: {e}")
+                
+        # Step 6: ข้อมูลสำหรับโพสต์ลง TikTok
+        if st.session_state.product_info and engine_mode == "⚡ อัตโนมัติ (ใช้ API Key)":
+            st.markdown("---")
+            st.subheader("📝 6. ข้อมูลสำหรับโพสต์ TikTok (Caption & Hashtags)")
+            try:
+                import json
+                post_data = json.loads(st.session_state.product_info)
+                
+                st.info(f"**📌 รายละเอียดสินค้า:**\n{post_data.get('product_details', '')}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.success(f"**💬 ข้อความพาดหัวคลิป (Overlay Text):**\n{post_data.get('overlay_text', '')}")
+                    st.warning(f"**🛒 ชื่อปุ่มตะกร้า/ลิงก์:**\n{post_data.get('link_title', '')}")
+                with col2:
+                    st.info(f"**📝 แคปชั่นโพสต์ขาย (Caption):**\n{post_data.get('post_caption', '')}")
+                    st.write(f"**#️⃣ แฮชแท็ก:**\n{post_data.get('hashtags', '')}")
+            except Exception as e:
+                with st.expander("📄 รายละเอียดและสคริปต์ตั้งต้น"):
+                    st.write(st.session_state.product_info)
