@@ -333,15 +333,5 @@ if uploaded_files:
                         st.write("🎥 **2. นำรูปภาพและพรอมต์นี้ไปทำภาพเคลื่อนไหว:**")
                         st.code(f"{scene.video_prompt}\n(Voiceover: {scene.script})", language="text")
                         
-                        st.markdown("---")
-                        st.write("📥 **3. อัปโหลดผลลัพธ์วิดีโอ (.mp4) กลับเข้ามา:**")
-                        uploaded_vid = st.file_uploader(f"อัปโหลดวิดีโอ ซีน {scene.scene_number}", type=['mp4'], key=f"vid_{scene.scene_number}")
-                        if uploaded_vid:
-                            vid_path = f"../assets/video/scene_{scene.scene_number}.mp4"
-                            with open(vid_path, "wb") as f:
-                                f.write(uploaded_vid.read())
-                            st.success(f"บันทึกวิดีโอซีน {scene.scene_number} แล้ว!")
-                            
-                            st.success(f"บันทึกวิดีโอซีน {scene.scene_number} แล้ว!")
             except Exception as e:
                 st.error(f"ข้อผิดพลาดระหว่างแสดงผลสคริปต์: {e}")
