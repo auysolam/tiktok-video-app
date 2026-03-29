@@ -114,10 +114,14 @@ if uploaded_files:
                 if char_type == "อื่นๆ":
                     char_type = st.text_input("ระบุตัวละครอื่นๆ:", disabled=product_only_mode)
                     
+                is_thai_char = st.checkbox("🇹🇭 บังคับตัวละครหน้าตาคนไทย (Thai Nationality)", value=True, disabled=product_only_mode)
+                    
                 no_char_mode = product_only_mode
                 
                 if no_char_mode:
                     char_type = "ไม่มีตัวละคร"
+                elif is_thai_char and "ไทย" not in char_type:
+                    char_type = f"{char_type} (หน้าตาคนไทย เอเชีย)"
 
                 char_skin = st.selectbox("🎨 2.2 สีผิวตัวละคร", ["ผิวขาว/สว่าง", "ผิวแทน/น้ำผึ้ง", "ผิวคล้ำเข้ม", "ไม่ระบุ (ให้ AI เลือกเอง)"], disabled=no_char_mode)
                 char_bg = st.selectbox("🏞️ 2.3 ฉากหลัง (Background)", ["ไม่ระบุ (อิสระตามเนื้อเรื่อง)", "ธรรมชาติป่าไม้ 🌳", "ทะเล/ชายหาด 🌊", "ภูเขา ⛰️", "ในเมือง/ตึกชิคๆ 🏙️"])
