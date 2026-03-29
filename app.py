@@ -306,10 +306,33 @@ if uploaded_files:
                         st.write("🖼️ **1. นำพรอมต์นี้ไปสร้างรูป (Image Prompt):**")
                         st.code(scene.image_prompt, language="text")
                         
+                        col_auto, col_manual = st.columns(2)
+                        with col_auto:
+                            if os.getenv("GEMINI_API_KEY"):
+                                if st.button(f"✨ ใช้ API วาดรูปนี้อัตโนมัติ", key=f"gen_img_{scene.scene_number}", use_container_width=True):
+                                    with st.spinner("กำลังส่งพรอมต์ไปวาดภาพด้วย Imagen 3..."):
+                                        img_path = f"../assets/input/scene_{scene.scene_number}_generated.jpg"
+                                        success, error_msg = generate_image_from_prompt(scene.image_prompt, img_path)
+                                        if success:
+                                            st.session_state.generated_images[scene.scene_number] = img_path
+                                            st.rerun()
+                                        else:
+                                            st.error(f"ข้อผิดพลาด: {error_msg}")
+                            else:
+                                st.info("💡 ใส่ API Key ที่แถบด้านซ้ายเพื่อใช้ปุ่มวาดรูปอัตโนมัติ")
+                                
+                        with col_manual:
+                            uploaded_scene_img = st.file_uploader(f"📥 หรืออัปโหลดรูปที่คุณเจนมาเอง", type=['jpg', 'jpeg', 'png', 'webp'], key=f"up_img_{scene.scene_number}")
+                            if uploaded_scene_img:
+                                img_path = f"../assets/input/scene_{scene.scene_number}_generated.jpg"
+                                with open(img_path, "wb") as f:
+                                    f.write(uploaded_scene_img.getbuffer())
+                                st.session_state.generated_images[scene.scene_number] = img_path
+                        
                         if st.session_state.generated_images and scene.scene_number in st.session_state.generated_images:
                             img_path = st.session_state.generated_images[scene.scene_number]
                             if os.path.exists(img_path):
-                                st.image(Image.open(img_path), caption=f"ภาพที่วาดได้ (ซีน {scene.scene_number})", use_container_width=True)
+                                st.image(Image.open(img_path), caption=f"✅ ภาพที่ได้ (ซีน {scene.scene_number}) บันทึกเก็บไว้เรียบร้อยแล้ว นำไปใช้ทำวิดีโอต่อได้เลย", use_container_width=True)
                                 
                         st.markdown("---")
                         st.write("🎥 **2. นำรูปภาพและพรอมต์นี้ไปทำภาพเคลื่อนไหว:**")
@@ -352,15 +375,22 @@ if uploaded_files:
                 import json
                 post_data = json.loads(st.session_state.custom_post_json)
                 
-                st.info(f"**📌 รายละเอียดสินค้า:**\n{post_data.get('product_details', '')}")
+                st.info("**📌 รายละเอียดสินค้า**")
+                st.code(post_data.get('product_details', ''), language="text")
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.success(f"**💬 ข้อความพาดหัวคลิป (Overlay Text):**\n{post_data.get('overlay_text', '')}")
-                    st.warning(f"**🛒 ชื่อปุ่มตะกร้า/ลิงก์:**\n{post_data.get('link_title', '')}")
+                    st.success("**💬 ข้อความพาดหัวคลิป (Overlay Text)**")
+                    st.code(post_data.get('overlay_text', ''), language="text")
+                    
+                    st.warning("**🛒 ชื่อปุ่มตะกร้า/ลิงก์**")
+                    st.code(post_data.get('link_title', ''), language="text")
                 with col2:
-                    st.info(f"**📝 แคปชั่นโพสต์ขาย (Caption):**\n{post_data.get('post_caption', '')}")
-                    st.write(f"**#️⃣ แฮชแท็ก:**\n{post_data.get('hashtags', '')}")
+                    st.info("**📝 แคปชั่นโพสต์ขาย (Caption)**")
+                    st.code(post_data.get('post_caption', ''), language="text")
+                    
+                    st.write("**#️⃣ แฮชแท็ก**")
+                    st.code(post_data.get('hashtags', ''), language="text")
             except Exception as e:
                 st.error("ข้อมูลที่ตอบกลับมาไม่ใช่รูปแบบ JSON")
                 with st.expander("ดูข้อความดิบจาก AI"):
