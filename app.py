@@ -318,31 +318,50 @@ if uploaded_files:
             except Exception as e:
                 st.error(f"ข้อผิดพลาดระหว่างแสดงผลสคริปต์: {e}")
                 
-        # Step 6: ข้อมูลสำหรับโพสต์ลง TikTok
-        if st.session_state.get('video_plan_json'):
-            st.markdown("---")
-            st.subheader("📝 6. ข้อมูลสำหรับโพสต์ TikTok (Caption & Hashtags)")
+        st.markdown("---")
+        st.subheader("📝 6. ข้อมูลสำหรับโพสต์ TikTok (Caption & Hashtags)")
+        st.write("อัปโหลดรูปภาพสินค้าใหม่ เพื่อให้ AI ตีความจุดขายและเขียนแคปชั่น แฮชแท็ก ป้ายกำกับต่างๆ สำหรับโพสต์ลง TikTok โดยเฉพาะ (ไม่ต้องสนใจรูปด้านบน)")
+        
+        post_uploaded_files = st.file_uploader("📸 อัปโหลดรูปภาพสำหรับหน้าโพสต์ (1-4 ภาพ)", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True, key="post_upload")
+        
+        if st.button("✨ วิเคราะห์ภาพและสร้างแคปชั่นโพสต์", use_container_width=True):
+            if not post_uploaded_files:
+                st.warning("⚠️ กรุณาอัปโหลดรูปภาพสินค้าก่อนครับ")
+            elif not os.getenv("GEMINI_API_KEY"):
+                st.warning("⚠️ กรุณาใส่ Gemini API Key (ที่แถบตั้งค่าด้านซ้าย) เพื่อเริ่มใช้งาน")
+            else:
+                with st.spinner("กำลังให้เซียนการตลาด AI วิเคราะห์ภาพและคิดแคปชั่น..."):
+                    try:
+                        os.makedirs("../assets/input", exist_ok=True)
+                        post_img_paths = []
+                        for idx, f in enumerate(post_uploaded_files):
+                            path = f"../assets/input/post_img_{idx}.jpg"
+                            with open(path, "wb") as pf:
+                                pf.write(f.read())
+                            post_img_paths.append(path)
+                        
+                        from core.gemini_engine import analyze_product_from_images
+                        result_json = analyze_product_from_images(post_img_paths)
+                        st.session_state.custom_post_json = result_json
+                        st.success("✅ ร่างแคปชั่นเสร็จสมบูรณ์!")
+                    except Exception as e:
+                        st.error(f"เกิดข้อผิดพลาดในการวิเคราะห์: {e}")
+                        
+        if st.session_state.get('custom_post_json'):
             try:
                 import json
-                plan_data = json.loads(st.session_state.video_plan_json)
-                post_data = plan_data.get('tiktok_post_data')
+                post_data = json.loads(st.session_state.custom_post_json)
                 
-                # ถ้าหาไม่เจอใน VideoPlan ให้ดึงจากข้อมูลใน Step 1
-                if not post_data and st.session_state.get('product_info') and engine_mode == "⚡ อัตโนมัติ (ใช้ API Key)":
-                    try:
-                        post_data = json.loads(st.session_state.product_info)
-                    except:
-                        pass
+                st.info(f"**📌 รายละเอียดสินค้า:**\n{post_data.get('product_details', '')}")
                 
-                if post_data:
-                    st.info(f"**📌 รายละเอียดสินค้า:**\n{post_data.get('product_details', '')}")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.success(f"**💬 ข้อความพาดหัวคลิป (Overlay Text):**\n{post_data.get('overlay_text', '')}")
-                        st.warning(f"**🛒 ชื่อปุ่มตะกร้า/ลิงก์:**\n{post_data.get('link_title', '')}")
-                    with col2:
-                        st.info(f"**📝 แคปชั่นโพสต์ขาย (Caption):**\n{post_data.get('post_caption', '')}")
-                        st.write(f"**#️⃣ แฮชแท็ก:**\n{post_data.get('hashtags', '')}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.success(f"**💬 ข้อความพาดหัวคลิป (Overlay Text):**\n{post_data.get('overlay_text', '')}")
+                    st.warning(f"**🛒 ชื่อปุ่มตะกร้า/ลิงก์:**\n{post_data.get('link_title', '')}")
+                with col2:
+                    st.info(f"**📝 แคปชั่นโพสต์ขาย (Caption):**\n{post_data.get('post_caption', '')}")
+                    st.write(f"**#️⃣ แฮชแท็ก:**\n{post_data.get('hashtags', '')}")
             except Exception as e:
-                pass
+                st.error("ข้อมูลที่ตอบกลับมาไม่ใช่รูปแบบ JSON")
+                with st.expander("ดูข้อความดิบจาก AI"):
+                    st.write(st.session_state.custom_post_json)
