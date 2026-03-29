@@ -7,7 +7,6 @@ import json
 # นำเข้าฟังก์ชันจากระบบที่เราเขียนไว้
 from core.gemini_engine import generate_video_plan, analyze_product_from_images, generate_image_from_prompt
 from core.asset_generator import process_all_assets
-from core.video_editor import assemble_tiktok_video
 from core.schema import VideoPlan
 
 # ตั้งค่าหน้าเว็บ
@@ -33,16 +32,17 @@ with st.sidebar:
     st.header("⚙️ การตั้งค่าระบบ")
     engine_mode = st.radio("🧠 โหมดการทำงาน", ["👨‍💻 แมนนวล (ไร้ API / สร้าง Prompt ไปก๊อปวาง)", "⚡ อัตโนมัติ (ใช้ API Key)"])
     
+    api_key_input = st.text_input("🔑 ใส่ Gemini API Key ของคุณ:", type="password")
+    if api_key_input:
+        os.environ["GEMINI_API_KEY"] = api_key_input
+        st.success("บันทึก API Key แล้ว")
+        
     if engine_mode == "⚡ อัตโนมัติ (ใช้ API Key)":
-        api_key_input = st.text_input("🔑 ใส่ Gemini API Key ของคุณ:", type="password")
-        if api_key_input:
-            os.environ["GEMINI_API_KEY"] = api_key_input
-            st.success("บันทึก API Key แล้ว")
-        else:
-            st.warning("⚠️ โปรดใส่ API Key ก่อนใช้งาน")
+        if not api_key_input:
+            st.warning("⚠️ โปรดใส่ API Key ก่อนใช้งานโหมดอัตโนมัติ")
         st.markdown("**สถานะระบบ:** 🟢 โหมดอัตโนมัติทำงานเต็มรูปแบบ\n(ระบบจะใช้ Gemini API Key ของคุณเชื่อมต่อออโต้)")
     else:
-        st.success("🟢 โหมดแมนนวลทำงาน\n(ไร้ลิมิต! ระบบจะช่วยปรุงโค้ด Prompt เทพๆ ให้คุณอัปโหลดนำไปสั่ง Gemini Advanced วาดให้เองครับ)")
+        st.success("🟢 โหมดแมนนวลทำงาน\n(ไร้ลิมิต! ระบบช่วยปรุงโค้ดให้คุณไปก๊อปวาง หรือใช้ปุ่ม API ลัดได้ถ้ากรอก Key ด้านบนแล้ว)")
 
 # ส่วนอัปโหลดภาพสินค้า
 uploaded_files = st.file_uploader("📸 อัปโหลดรูปภาพสินค้าของคุณทั้งหมด (รับได้ 1-4 ภาพ) (JPG, PNG, WEBP)", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
@@ -82,12 +82,27 @@ if uploaded_files:
                         except Exception as e:
                             st.error(f"เกิดข้อผิดพลาด: {e}")
             if st.session_state.product_info:
-                with st.expander("📄 รายละเอียดและสคริปต์ตั้งต้น (กดเพื่อดู/แก้ไข)"):
-                    st.write(st.session_state.product_info)
+                try:
+                    import json
+                    post_data = json.loads(st.session_state.product_info)
+                    st.markdown("### 📝 ข้อมูลสำหรับโพสต์ขาย (TikTok)")
+                    
+                    st.info(f"**📌 1. รายละเอียดสินค้า:**\n{post_data.get('product_details', '')}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.success(f"**💬 2. ข้อความพาดหัวคลิป (Overlay Text):**\n{post_data.get('overlay_text', '')}")
+                        st.warning(f"**🛒 3. ชื่อปุ่มตะกร้า/ลิงก์:**\n{post_data.get('link_title', '')}")
+                    with col2:
+                        st.info(f"**📝 4. แคปชั่น (Caption):**\n{post_data.get('post_caption', '')}")
+                        st.write(f"**#️⃣ 5. แฮชแท็ก:**\n{post_data.get('hashtags', '')}")
+                except Exception as e:
+                    with st.expander("📄 รายละเอียดและสคริปต์ตั้งต้น"):
+                        st.write(st.session_state.product_info)
         else:
             # โหมดแมนนวล ข้ามการยิง API วิเคราะห์สินค้า และถือว่ามีข้อมูลเริ่มต้นเลยเพื่อปลดล็อคขั้นตอนถัดไป
             if not st.session_state.product_info:
-                st.session_state.product_info = "(โหมดแมนนวล: ระบบจะให้ Gemini วิเคราะห์สินค้าจากภาพที่คุณแนบไปบนเว็บโดยตรง)"
+                st.session_state.product_info = "(โหมดแมนนวล: ระบบจะให้ Gemini วิเคราะห์สินค้าช่วยสำหรับโหมดแมนนวล)"
 
         # แสดงส่วนตั้งค่าวิดีโอทันทีที่อัปโหลด (ถ้าเป็นแมนนวล) หรือเมื่อวิเคราะห์เสร็จ (ถ้าเป็นออโต้)
         if st.session_state.product_info:
@@ -103,9 +118,11 @@ if uploaded_files:
                     no_voiceover = st.checkbox("🚫 ไม่เอาบทพูด (เน้นดนตรีประกอบอย่างเดียว)", value=False)
 
                 if fashion_mode:
-                    char_options = ["ผู้หญิง", "ผู้ชาย", "เด็กเล็ก", "คนแก่", "อื่นๆ"]
+                    fashion_item_type = st.selectbox("👗 2.1.2 ประเภทสินค้าแฟชั่น", ["เสื้อ (Tops)", "กางเกง/กระโปรง (Bottoms)", "ชุดเดรส/ชุดเซท (Dress/Sets)", "กระเป๋า (Bags)", "รองเท้า (Shoes)", "หมวก/เครื่องประดับ (Accessories)", "อื่นๆ"])
+                    char_options = ["สาวไทย (วัยรุ่น)", "หนุ่มไทย (วัยรุ่น)", "สาวไทย (วัยทำงาน)", "หนุ่มไทย (วัยทำงาน)", "นางแบบอินเตอร์", "นายแบบอินเตอร์", "เด็กเล็ก", "คนแก่", "อื่นๆ"]
                 else:
-                    char_options = ["สาวไทย", "หนุ่มไทย", "ผู้หญิงทั่วไป", "ผู้ชายทั่วไป", "คนแก่", "สุนัข", "แมว", "อื่นๆ"]
+                    fashion_item_type = ""
+                    char_options = ["สาวไทย (วัยรุ่น)", "หนุ่มไทย (วัยรุ่น)", "สาวไทย (วัยทำงาน)", "หนุ่มไทย (วัยทำงาน)", "ผู้หญิงทั่วไป", "ผู้ชายทั่วไป", "คนแก่", "ครอบครัวพ่อแม่ลูก", "คู่รัก", "สุนัข", "แมว", "อื่นๆ"]
 
                 char_type = st.selectbox("👤 2.1 เลือกตัวละครหลัก", char_options, index=0, disabled=product_only_mode)
                 if char_type == "อื่นๆ":
@@ -166,7 +183,8 @@ if uploaded_files:
                                     voice_type=voice_type,
                                     voice_emotion=voice_emotion,
                                     no_voiceover=no_voiceover,
-                                    fashion_mode=fashion_mode
+                                    fashion_mode=fashion_mode,
+                                    fashion_item_type=fashion_item_type
                                 )
                                 video_plan = VideoPlan.model_validate_json(json_result)
                                 st.session_state.video_plan_json = json_result
@@ -190,11 +208,11 @@ if uploaded_files:
                             video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
                             char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
                     elif fashion_mode:
-                        char_rule = f"- โหมดแฟชั่น: เน้นการถ่ายแบบเสื้อผ้าเครื่องแต่งกาย (Fashion Lookbook/Try-on)\n- ตัวละครหลัก (นายแบบ/นางแบบ): {char_type}\n- สีผิว: {char_skin}\n- บุคลิกภาพ/รูปร่าง: {traits_str}\n- **บังคับเนื้อเรื่อง:** ตัวละครต้องสวมใส่เสื้อผ้าหรือสินค้าแฟชั่นอย่างมีสไตล์ วางโพสมั่นใจ\n"
-                        scene_rule = f"2. ต้องมีฉากที่นำเสนอ \"ตัวสินค้าแฟชั่นบนตัวละครชัดๆ\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเดินแบบ/โพสท่า (Fashion/Lifestyle)\" เน้นโชว์ชุดและตัวละครหลัก"
+                        char_rule = f"- โหมดแฟชั่น (ประเภทสินค้า: {fashion_item_type}): เน้นการถ่ายทอดรูปทรง เนื้อผ้า และความพริ้วไหวของสินค้า ไม่เน้นหน้าตานายแบบ/นางแบบ\n- ตัวละครหลัก: {char_type}\n- สีผิว: {char_skin}\n- บุคลิกภาพ/รูปร่าง: {traits_str}\n- **บังคับเนื้อเรื่อง:** กำหนดให้ตัวละครขยับตัวเพื่อโชว์สินค้า เช่น เดินเข้าหากล้อง, หมุนตัว, สะบัดชายเสื้อ/กระโปรง, เดินเหลียวหลัง\n- **ห้ามเปลี่ยนสีและดีไซน์เด็ดขาด:** กำชับใน Image prompt เสมอให้สั่งว่า \"Subject wearing/holding EXACTLY the same product from reference image, maintaining EXACT same color, exact same design, and same texture without any modifications\"\n"
+                        scene_rule = f"2. ต้องมีฉากที่นำเสนอ \"สินค้าประเภท {fashion_item_type} ชัดๆ\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเดินแบบ/โพสท่า\" ให้เน้น 'Fashion lookbook, DO NOT focus closely on the face. Focus entirely on the {fashion_item_type} details, textures, and product features'."
                         if no_voiceover:
                             script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
-                            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
+                            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"\n   - **ท่าทางการเคลื่อนไหวภาพ:** สั่งกำกับใน Video prompt เสมอให้ "Subject modeling the product, walking like a runway model, spinning around gracefully, dynamic posing to showcase product. Deep depth of field, NO bokeh, NO blurry background, sharp background"'
                             char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
                     else:
                         char_rule = f"- ตัวละครหลัก: {char_type}\n- สีผิว: {char_skin}\n- บุคลิกภาพ/รูปร่าง: {traits_str}\n"
@@ -218,6 +236,7 @@ if uploaded_files:
 5. เขียน image_prompt เป็นภาษาอังกฤษ เพื่อใช้ **เจนภาพนิ่งด้วย Gemini (Imagen 3)**
    - บังคับให้ใส่: "Vertical 9:16 aspect ratio, NO text overlays, NO typography"
    - **กฎความสมส่วนหน้าตาและสินค้า:** ให้สั่งย้ำคำว่า "Realistic anatomical proportions, product size is naturally scaled compared to character, exactly the SAME person identity across all scenes" เพื่อให้ภาพทุกซีนเป็นคนๆเดียวกันและขนาดสินค้าไม่ผิดเพี้ยน
+   - **สไตล์ภาพถ่ายสมจริง:** ให้ใส่คำว่า "Shot on modern smartphone, casual everyday lifestyle photo, deep depth of field (f/8.0), everything in focus, NO bokeh, NO blurry background, sharp background, natural authentic look" เสมอ เพื่อไม่ให้ภาพดูเจาะจงหน้าชัดหลังเบลอเกินจริง
    - บรรยายแสงเงา บรรยากาศ มุมกล้อง (Lighting, Mood, Camera angle) ให้สวยงามสมจริง ห้ามสั่งให้วาดป้ายราคา/ข้อความ
 6. เขียน video_prompt เป็นภาษาอังกฤษ สำหรับ **เจนวนิเมชัน+เสียง บน Google Labs Flow**
    - การขยับ: เน้นสั่งเฉพาะ 'Camera motion' และ 'Subject motion' อย่างกระชับ พร้อมสั่ง "NO text overlays"
@@ -227,12 +246,25 @@ if uploaded_files:
 รูปแบบโครงสร้าง JSON ที่ต้องตอบกลับ:
 {VideoPlan.model_json_schema()}"""
                     st.info("ขั้นตอนการทำ: 1) ถ่ายรูปสินค้าแนบขึ้นเว็บ Gemini 2) ก๊อปปี้คลิปบอร์ดข้อความด้านล่าง (มุมขวาบนของกล่องดำ) แปะลงช่องแชท 3) เคาะ Enter ให้มันคิดบท!")
-                    st.link_button("🌐 คลิกเปิดหน้าต่างเว็บ Gemini Advanced ทิ้งไว้ได้เลย", "https://gemini.google.com/app")
+                    st.markdown('<a href="https://gemini.google.com/app" target="_blank" style="display: block; width: 100%; text-align: center; padding: 0.5rem 1rem; background-color: #262730; color: white; text-decoration: none; border-radius: 0.5rem; border: 1px solid rgba(250, 250, 250, 0.2); margin-bottom: 1rem; font-family: sans-serif;">🌐 คลิกเปิดหน้าต่างเว็บ Gemini Advanced ทิ้งไว้ได้เลย</a>', unsafe_allow_html=True)
                     st.code(master_prompt, language="text")
+                    
+                    if os.getenv("GEMINI_API_KEY"):
+                        st.markdown("---")
+                        st.success("💡 **ตรวจพบ API Key ในระบบ:** กำลังลัดขั้นตอน ส่ง Prompt นี้ให้ Gemini ร่างบทให้คุณอัตโนมัติ...")
+                        with st.spinner("กำลังรับข้อมูลสคริปต์จาก AI... (รอสักครู่)"):
+                            try:
+                                from core.gemini_engine import run_manual_prompt_with_images
+                                result_json = run_manual_prompt_with_images(master_prompt, image_paths)
+                                st.session_state.demo_pasted_json = result_json
+                                st.success("✅ ได้รับบทมาเรียบร้อย! ระบบนำโค้ดไปวางในกล่อง 4.5 ด้านล่างให้แล้ว เลื่อนไปกดปุ่มประมวลผลต่อได้เลยครับ")
+                            except Exception as e:
+                                st.error(f"เกิดข้อผิดพลาดในการเชื่อมต่อ: {e}")
                 
                 st.markdown("---")
                 st.subheader("📥 4.5 วางผลลัพธ์จาก Gemini ลงที่นี่")
-                pasted_json = st.text_area("เมื่อหน้าเว็บ Gemini พิมพ์บทให้เสร็จ ให้ก๊อปปี้ 'โค้ด JSON' ทั้งหมด นำมาประเคนไว้ในช่องนี้ครับ:", height=150)
+                default_json = st.session_state.get('demo_pasted_json', '')
+                pasted_json = st.text_area("เมื่อหน้าเว็บ Gemini พิมพ์บทให้เสร็จ ให้ก๊อปปี้ 'โค้ด JSON' ทั้งหมด นำมาประเคนไว้ในช่องนี้ครับ:", value=default_json, height=150)
                 if st.button("✅ ประมวลผลตารางสคริปต์ (Render Storyboard)", use_container_width=True):
                     if pasted_json.strip():
                         try:
@@ -273,9 +305,9 @@ if uploaded_files:
                     st.markdown("*(โหมดแมนนวล: ก๊อปปี้ข้อความไปเจนรูปและวิดีโอบนเว็บได้เลยครับ)*")
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
-                        st.link_button("🌐 เปิดเว็บ Gemini (รูป)", "https://gemini.google.com/app", use_container_width=True)
+                        st.markdown('<a href="https://gemini.google.com/app" target="_blank" style="display: block; width: 100%; text-align: center; padding: 0.5rem 1rem; background-color: #262730; color: white; text-decoration: none; border-radius: 0.5rem; border: 1px solid rgba(250, 250, 250, 0.2); font-family: sans-serif;">🌐 เปิดเว็บ Gemini (รูป)</a>', unsafe_allow_html=True)
                     with col_btn2:
-                        st.link_button("🎥 เปิดเว็บ Labs Flow (วิดีโอ)", "https://labs.google/fx/tools/flow", use_container_width=True)
+                        st.markdown('<a href="https://labs.google/fx/tools/flow" target="_blank" style="display: block; width: 100%; text-align: center; padding: 0.5rem 1rem; background-color: #262730; color: white; text-decoration: none; border-radius: 0.5rem; border: 1px solid rgba(250, 250, 250, 0.2); font-family: sans-serif;">🎥 เปิดเว็บ Labs Flow (วิดีโอ)</a>', unsafe_allow_html=True)
 
                 os.makedirs("../assets/video", exist_ok=True)
                 os.makedirs("../assets/audio", exist_ok=True)
@@ -310,36 +342,6 @@ if uploaded_files:
                                 f.write(uploaded_vid.read())
                             st.success(f"บันทึกวิดีโอซีน {scene.scene_number} แล้ว!")
                             
-                # Step 8: ประกอบคลิป
-                st.markdown("---")
-                st.subheader("🎞️ 6. ประกอบร่างวิดีโอสุดท้าย (Render Final Video)")
-                st.markdown("เมื่ออัปโหลดวิดีโอครบทุกรูปผ่านแท็บด้านบนแล้ว กดปุ่มเพื่อประมวลผลเป็นคลิปเดียว")
-                
-                if st.button("🎬 เริ่มตัดต่อวิดีโอ (Assemble Video)", type="primary", use_container_width=True):
-                    with st.status("กำลังนำคลิปมาต่อกัน...", expanded=True) as status:
-                        try:
-                            output_video = "../output/final_video.mp4"
-                            st.write("กำลังแพทช์วิดีโอ (ขั้นตอนนี้อาจใช้เวลาสักครู่ โปรดอย่าปิดเว็บ)")
-                            assemble_tiktok_video(video_plan, output_path=output_video)
-                            
-                            if os.path.exists(output_video):
-                                status.update(label="ตัดต่อเสร็จสมบูรณ์! 🎉", state="complete")
-                                
-                                # แสดงผลวิดีโอ แบบยืดหยุ่นหน้าจอ
-                                st.video(output_video)
-                                    
-                                with open(output_video, "rb") as f:
-                                    st.download_button(
-                                        label="💾 ดาวน์โหลดวิดีโอฉบับเต็ม",
-                                        data=f,
-                                        file_name=f"tiktok_ready_{video_plan.product_name}.mp4",
-                                        mime="video/mp4",
-                                        use_container_width=True
-                                    )
-                            else:
-                                status.update(label="เกิดข้อผิดพลาด ไม่พบไฟล์ผลลัพธ์", state="error")
-                        except Exception as e:
-                            status.update(label="การตัดต่อล้มเหลว", state="error")
-                            st.error(f"รายละเอียดข้อผิดพลาด: {e}")
+                            st.success(f"บันทึกวิดีโอซีน {scene.scene_number} แล้ว!")
             except Exception as e:
                 st.error(f"ข้อผิดพลาดระหว่างแสดงผลสคริปต์: {e}")

@@ -71,17 +71,31 @@ def analyze_product_from_images(image_paths: List[str]) -> str:
         except:
             pass
             
-    system_instruction = "คุณคือนักการตลาดมือทอง ช่วยดูภาพสินค้าต่อไปนี้แล้วเขียน: 1. ชื่อ/ประเภทสินค้า 2. จุดเด่น/สรรพคุณ 3. ไอเดียสคริปต์การขายคร่าวๆ (Draft Script) สำหรับ TikTok เพื่อเป็นไอเดียตั้งต้น (เขียนสั้นๆ สรุปใจความสำคัญ)"
+    # ใช้ Schema ใหม่สำหรับโพสต์
+    from core.schema import TikTokPostData
+    
+    system_instruction = f"""คุณคือนักการตลาดมือทองบน TikTok ช่วยดูภาพสินค้าต่อไปนี้แล้วเขียนข้อมูลสำหรับโพสต์ขายของ:
+1. รายละเอียดสินค้า (วิเคราะห์จากภาพ)
+2. ข้อความสั้นๆ ดึงดูดใจไว้แปะบนวิดีโอ (เน้นสั้นๆ เช่น โปรโมชั่น ราคา ส่งฟรี)
+3. ข้อความโพสต์ขาย (Caption)
+4. แฮชแท็กสินค้า
+5. ชื่อสินค้า+ราคา หรือข้อความปุ่มตะกร้า (ไม่เกิน 30 ตัวอักษร เช่น 'กดสั่งซื้อ 59 บาท')
+
+ส่งข้อมูลกลับมาในรูปแบบ JSON ตาม Schema นี้เท่านั้น:
+{TikTokPostData.model_json_schema()}"""
+    
     response = client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพและร่างสคริปต์ขายของคร่าวๆให้หน่อย"],
+        contents=uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพและร่างรายละเอียดสำหรับการโพสต์ขาย TikTok ให้หน่อย ตอบกลับเป็น JSON เท่านั้น"],
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
+            response_mime_type="application/json",
+            temperature=0.7,
         )
     )
     return response.text
 
-def generate_video_plan(image_paths: List[str], product_details: str, character_type: str, character_skin: str, character_traits: str, use_sfx: bool, num_scenes: int, scene_duration: int, product_scene_count: int, background: str, voice_type: str, voice_emotion: str, no_voiceover: bool = False, fashion_mode: bool = False) -> VideoPlan:
+def generate_video_plan(image_paths: List[str], product_details: str, character_type: str, character_skin: str, character_traits: str, use_sfx: bool, num_scenes: int, scene_duration: int, product_scene_count: int, background: str, voice_type: str, voice_emotion: str, no_voiceover: bool = False, fashion_mode: bool = False, fashion_item_type: str = "") -> VideoPlan:
     """
     รับรายการภาพสินค้าและใช้ Gemini สร้างแผนการทำวิดีโอ (JSON) กลับมา โดยอิงตามการตั้งค่าตัวละครและโครงสร้าง
     """
@@ -120,12 +134,12 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
             script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
             video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
     elif fashion_mode:
-        char_rule = f"- โหมดแฟชั่น: เน้นการถ่ายแบบเสื้อผ้าเครื่องแต่งกาย (Fashion Lookbook/Try-on)\n- ตัวละครหลัก (นายแบบ/นางแบบ): {character_type}\n- สีผิว: {character_skin}\n- บุคลิกภาพ/รูปร่าง: {character_traits}\n- **บังคับเนื้อเรื่อง:** ตัวละครต้องสวมใส่เสื้อผ้าหรือสินค้าแฟชั่นอย่างมีสไตล์ วางโพสมั่นใจ\n"
-        scene_rule = f"2. ต้องมีฉากที่นำเสนอ \"ตัวสินค้าแฟชั่นบนตัวละครชัดๆ\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเดินแบบ/โพสท่า (Fashion/Lifestyle)\" ในซีนเล่าเรื่องให้เน้น 'Fashion lookbook style, full body shot or mid shot, model wearing the product perfectly, confident pose, cinematic fashion lighting'."
+        char_rule = f"- โหมดแฟชั่น (ประเภทสินค้า: {fashion_item_type}): เน้นการถ่ายทอดรูปทรง เนื้อผ้า และความพริ้วไหวของสินค้า ไม่เน้นหน้าตานายแบบ/นางแบบ\n- ตัวละครหลัก: {character_type}\n- สีผิว: {character_skin}\n- บุคลิกภาพ/รูปร่าง: {character_traits}\n- **บังคับเนื้อเรื่อง:** กำหนดให้ตัวละครขยับตัวเพื่อโชว์สินค้า เช่น เดินเข้าหากล้อง, หมุนตัว, โพสท่าโชว์สินค้า\n- **ห้ามเปลี่ยนสีและดีไซน์เด็ดขาด:** กำชับใน Image prompt เสมอให้สั่งว่า \"Subject wearing/holding EXACTLY the same product from reference image, maintaining EXACT same color, exact same design, and same texture without any modifications\"\n"
+        scene_rule = f"2. ต้องมีฉากที่นำเสนอ \"สินค้าประเภท {fashion_item_type} ชัดๆ\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเดินแบบ/โพสท่า\" ให้เน้น 'Fashion lookbook, DO NOT focus closely on the face. Focus entirely on the {fashion_item_type} details, textures, and product features'."
         if no_voiceover:
             char_rule += "- **ย้ำ: ไม่ต้องคิดบทพูด (Voiceover) เด็ดขาด**\n"
             script_instruction = '3. **ห้ามแต่งบทพูดเด็ดขาด (No Voiceover)** ให้ปล่อยฟิลด์ script ว่างไว้ หรือเขียนเพียงแค่ "[ดนตรีบรรเลงเร้าใจ]"'
-            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"'
+            video_voice_instruction = '- **ข้อบังคับเรื่องเสียง:** กำชับไว้ใน Video Prompt เสมอว่า "NO voiceover, NO dialogue, ONLY energetic background music and cinematic sound effects"\n       - **ท่าทางการเคลื่อนไหวภาพ:** บังคับใน Video prompt ให้ระบุ "Subject modeling the product, walking like a model, spinning around gracefully, posing dynamically to showcase product. Deep depth of field, NO bokeh, NO blurry background, sharp background"'
     else:
         char_rule = f"- ตัวละครหลัก: {character_type}\n- สีผิว: {character_skin}\n- บุคลิกภาพ/รูปร่าง: {character_traits}\n"
         scene_rule = f"2. ต้องมีฉากที่เจาะจงนำเสนอ \"ตัวสินค้าชัดๆ (Product Shot)\" จำนวน {product_scene_count} ซีน ส่วนซีนที่เหลือให้เป็น \"ฉากเล่าเรื่อง/ไลฟ์สไตล์ (Story/Lifestyle)\" ที่มีตัวละครหลัก ในซีนเล่าเรื่องให้เน้น 'Subject interacting naturally with the product, lifestyle photography, expressive facial features, cinematic composition'."
@@ -152,6 +166,7 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
     5. เขียน image_prompt เป็นภาษาอังกฤษ เพื่อใช้ **เจนภาพนิ่งด้วย Gemini (Imagen 3) โดยเฉพาะ** 
        - บังคับใส่คำว่า "Vertical 9:16 aspect ratio, pure visual, no typography, blank product, NO text overlays, NO letters, NO labels" ต่อท้ายเสมอ
        - **สำคัญด้านความสมส่วนและความต่อเนื่อง:** ต้องสั่ง "Realistic anatomical proportions, perfectly scaled product compared to human subject, exactly the same character identity across all images"
+       - **สไตล์ภาพถ่ายจากมือถือสมจริง:** ให้ระบุลงใน Prompt เสมอว่า "Shot on modern smartphone, casual lifestyle photo, deep depth of field, everything in focus, NO bokeh, NO blurry background, sharp background, natural authentic look" เพื่อหลีกเลี่ยงภาพหน้าชัดหลังเบลอที่ดูไม่สมจริง
        - บรรยายรูปร่าง สี ดีไซน์ ของสินค้าให้ตรงปก ห้ามนำป้ายโฆษณา/ราคามาใส่ใน Prompt เด็ดขาด และห้ามสั่งให้วาดข้อความ
     6. เขียน video_prompt เป็นภาษาอังกฤษ สำหรับ **ภาพเคลื่อนไหวพร้อมเสียง**
        - บังคับใส่คำว่า "NO text overlays, NO letters, pure visual" เสมอ
@@ -178,6 +193,31 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
         )
     )
     
+    return response.text
+
+def run_manual_prompt_with_images(prompt: str, image_paths: List[str]) -> str:
+    """ ฟังก์ชันลัดสำหรับโหมดแมนนวล ยิง Prompt เข้า API เพื่อเอา JSON กลับมา """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("Please set GEMINI_API_KEY")
+
+    client = genai.Client(api_key=api_key)
+    import PIL.Image
+    uploaded_images = []
+    for path in image_paths:
+        try:
+            img = PIL.Image.open(path)
+            uploaded_images.append(img)
+        except: pass
+            
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=uploaded_images + [prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.7,
+        )
+    )
     return response.text
 
 if __name__ == "__main__":
