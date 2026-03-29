@@ -11,6 +11,32 @@ load_dotenv()
 
 from typing import List
 import os
+import time
+import streamlit as st
+
+def _safe_generate_content(client, model, contents, config, max_retries=3):
+    """
+    ฟังก์ชันช่วยรัน API และรออัตโนมัติหากเจอ (429 RESOURCE_EXHAUSTED)
+    """
+    for attempt in range(max_retries):
+        try:
+            return client.models.generate_content(model=model, contents=contents, config=config)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                if attempt < max_retries - 1:
+                    wait_time = 35  # รออย่างน้อย 35 วินาทีตามที่ Google แนะนำในบัค
+                    try:
+                        # ลองพ่นข้อความออก UI ให้ผู้ใช้ทราบว่าคิวเต็มกำลังรอ
+                        st.warning(f"⚠️ ระบบติดเครื่องหมาย Rate Limit กำลังรอ {wait_time} วินาทีเพื่อโหลดต่ออัตโนมัติ (รอบที่ {attempt+1})")
+                    except:
+                        pass
+                    time.sleep(wait_time)
+                else:
+                    raise e
+            else:
+                raise e
+
 
 def generate_image_from_prompt(prompt: str, output_path: str):
     """
@@ -84,7 +110,8 @@ def analyze_product_from_images(image_paths: List[str]) -> str:
 ส่งข้อมูลกลับมาในรูปแบบ JSON ตาม Schema นี้เท่านั้น:
 {TikTokPostData.model_json_schema()}"""
     
-    response = client.models.generate_content(
+    response = _safe_generate_content(
+        client=client,
         model='gemini-2.5-flash',
         contents=uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพและร่างรายละเอียดสำหรับการโพสต์ขาย TikTok ให้หน่อย ตอบกลับเป็น JSON เท่านั้น"],
         config=types.GenerateContentConfig(
@@ -170,7 +197,9 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
        - บรรยายรูปร่าง สี ดีไซน์ ของสินค้าให้ตรงปก ห้ามนำป้ายโฆษณา/ราคามาใส่ใน Prompt เด็ดขาด และห้ามสั่งให้วาดข้อความ
     6. เขียน video_prompt เป็นภาษาอังกฤษ สำหรับ **ภาพเคลื่อนไหวพร้อมเสียง**
        - บังคับใส่คำว่า "NO text overlays, NO letters, pure visual" เสมอ
-       - สั่งเฉพาะ 'Camera motion' เช่น 'Subtle camera pan right' และ 'Subject motion' ว่าอะไรเคลื่อนไหว
+       - **สไตล์การถ่ายทำ:** บังคับใส่คำว่า "Handheld camera shot on smartphone, Reels dynamic style, normal speed, NO slow motion" เพื่อให้ดูเหมือนถ่ายจากมือถือ
+       - **ความสมบูรณ์ของร่างกาย:** บังคับใส่คำว่า "Anatomically correct, continuous smooth natural movement, NO missing limbs, NO extra fingers, consistent body parts" เพื่อป้องกันภาพแขนขาขาดหาย
+       - สั่งเฉพาะ 'Camera motion' เช่น 'Handheld subtle shake, pan right' และ 'Subject motion' ว่าอะไรเคลื่อนไหวให้ต่อเนื่องและสมจริง
        {video_voice_instruction}
     7. ส่งข้อมูลกลับมาในรูปแบบ JSON ตาม Schema ที่กำหนดเท่านั้น ห้ามมีข้อความอื่นปน
     
@@ -183,7 +212,8 @@ def generate_video_plan(image_paths: List[str], product_details: str, character_
     # ส่งภาพทั้งหมดเข้าไปพร้อมคำสั่ง
     request_contents = uploaded_images + ["ช่วยวิเคราะห์ข้อมูลสินค้าจากภาพทั้งหมดนี้ และสร้างสคริปต์วิดีโอ TikTok ให้หน่อยครับ ตอบกลับมาเป็นโครงสร้าง JSON ล้วนๆ"]
     
-    response = client.models.generate_content(
+    response = _safe_generate_content(
+        client=client,
         model='gemini-2.5-flash',
         contents=request_contents,
         config=types.GenerateContentConfig(
@@ -210,7 +240,8 @@ def run_manual_prompt_with_images(prompt: str, image_paths: List[str]) -> str:
             uploaded_images.append(img)
         except: pass
             
-    response = client.models.generate_content(
+    response = _safe_generate_content(
+        client=client,
         model='gemini-2.5-flash',
         contents=uploaded_images + [prompt],
         config=types.GenerateContentConfig(
